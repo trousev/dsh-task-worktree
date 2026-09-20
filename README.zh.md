@@ -31,7 +31,8 @@
 ## 工作流
 
 ```
-空白对话：发送前在下拉框选「Worktree模式」（分支名可选，自动加 worktree/ 前缀）
+空白对话：输入框上方的模式选择器跟随「默认模式」设置（设置 → 插件 → 任务 Worktree），
+          也可以自己选「Worktree模式」（分支名可选，自动加 worktree/ 前缀）
    │  发送第一条消息 → 宿主注入一条「上下文注入」instructions 块
    ▼  模型在同一轮调用 worktree_create
    │  git worktree add -b worktree/<名称> <仓库>/.dsh-worktrees/worktree/worktree/<名称>
@@ -44,7 +45,7 @@
                                                  （--force 连未提交改动一起删）
 ```
 
-1. **以 Worktree 模式开始**：空白对话、发送前，dock 选择器显示「分支名：」——选「Worktree模式」即武装会话；分支名可选（输入的会自动加 `worktree/` 前缀，留空由模型拟定）。**对话开始后选择器自动隐藏**，由会话头部徽标接管指示。
+1. **以 Worktree 模式开始**：空白对话、发送前，dock 选择器显示「分支名：」——选「Worktree模式」即武装会话；分支名可选（输入的会自动加 `worktree/` 前缀，留空由模型拟定）。**对话开始后选择器自动隐藏**，由会话头部徽标接管指示。在**设置 → 插件 → 任务 Worktree**里把默认模式设为 Worktree，之后每个新对话都直接以该模式开始。
 2. **发送第一条消息** → 宿主在你消息前注入一条 `instructions` 上下文块（界面显示为「上下文注入」）：创建 `worktree/` 前缀分支、在 checkout 路径内干活、任务结束时**给出可复制的收尾命令**（`bring-back` 或 `remove --force`）。
 3. 或跳过模式，直接让 agent 隔离任务：**"用 worktree 隔离干活，任务叫 xxx"** —— 模型调用 `worktree_create`，name 同时作分支名与路径（支持斜杠）。
 4. **不注册任何工作区**，侧边栏保持干净；worktree 模式下会话头部显示分支徽标。
@@ -57,6 +58,27 @@ dsh plugin --profile web add dsh-task-worktree
 ```
 
 要求：DeepSeek Harness `0.1.0-rc.7` 包线、Git 2.31+、Node 20+。
+
+## 设置
+
+插件注册 `task-worktree` 设置命名空间，并在**设置 → 插件 → Plugin configuration** 里提供自己的卡片。
+
+| 字段 | 默认 | 含义 |
+| --- | --- | --- |
+| `defaultMode` | `local` | 新对话的默认模式。设为 `worktree` 时，宿主会在第一条真人消息到达时自动注入创建指引——不用再手动选，新任务天然隔离。 |
+| `rememberLastChoice` | `true` | 输入框上方的模式切换同时更新 `defaultMode`，下个对话自动沿用上次选择；关闭后切换只对当前对话生效。 |
+
+默认模式只作用于「从空白开始」的对话。在输入框上方选**本地模式**即是对该对话的明确表态：无论默认是什么，宿主都不会为它自动武装。
+
+设置存在普通的用户设置文档里，也可以直接手改并即时生效：
+
+```yaml
+task-worktree:
+  defaultMode: worktree
+  rememberLastChoice: true
+```
+
+宿主没有设置服务时，插件继续用组合默认值（本地模式）工作，卡片不会出现。
 
 ## 模型工具
 
@@ -93,9 +115,15 @@ dsh plugin --profile web add dsh-task-worktree
 ## 本地开发
 
 ```bash
-npm test              # 冒烟测试：临时仓库全生命周期
+npm test              # 冒烟（worktree 全生命周期）+ 模式策略 + 宿主半 + 浏览器偏好
+npm run typecheck     # 客户端 TypeScript 类型检查
+npm run build:client  # 重新构建 client/client.js（tsdown + lightningcss）
 npm pack --dry-run    # 发布前检查包内容
 ```
+
+四个测试：`test/smoke.mjs`（临时仓库上的 git 全生命周期）、`test/mode.mjs`（武装策略）、
+`test/host.mjs`（在假 cordis 上下文里跑真实 `apply()`：设置命名空间 + 注入）、
+`test/prefs.mjs`（浏览器偏好 store；需 Node 22.6+，更低版本自动跳过）。
 
 ## License
 

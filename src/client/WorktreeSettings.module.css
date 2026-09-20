@@ -1,0 +1,213 @@
+/* Card on the Plugins → Plugin configuration settings page. The host's own
+   card chrome is package-internal (client bundle purity forbids importing it),
+   so this mirrors its shape with the same design tokens. */
+
+.card {
+  box-sizing: border-box;
+  width: 100%;
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary, #1f1f1f);
+  background: var(--dsw-alias-bg-base, #fff);
+  border: 1px solid var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.12));
+  border-radius: 10px;
+}
+
+.cardOpen {
+  background: var(--dsw-alias-bg-base, #fff);
+}
+
+.header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 12px 14px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+}
+
+.header:hover {
+  background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, 0.035));
+}
+
+.header:focus-visible,
+.segBtn:focus-visible,
+.switch:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary, #4f73ff);
+  outline-offset: 1px;
+}
+
+.headText {
+  min-width: 0;
+}
+
+.name {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.desc {
+  margin-top: 2px;
+  color: var(--dsw-alias-label-secondary, #5f6368);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.chevron {
+  display: inline-flex;
+  flex: none;
+  color: var(--dsw-alias-label-caption, #8a8f98);
+  transition: transform 140ms ease;
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 14px 12px;
+  border-top: 1px solid var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.08));
+}
+
+.row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.06));
+}
+
+.row:last-of-type {
+  border-bottom: 0;
+}
+
+.labelBox {
+  min-width: 0;
+}
+
+.label {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 19px;
+}
+
+.hint {
+  margin-top: 2px;
+  color: var(--dsw-alias-label-secondary, #5f6368);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.seg {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  padding: 2px;
+  background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, 0.045));
+  border-radius: 8px;
+}
+
+.segBtn {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  color: var(--dsw-alias-label-secondary, #5f6368);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+}
+
+.segBtn:hover:not(:disabled) {
+  color: var(--dsw-alias-label-primary, #1f1f1f);
+}
+
+.segOn {
+  color: var(--dsw-alias-label-primary, #1f1f1f);
+  font-weight: 500;
+  background: var(--dsw-alias-bg-base, #fff);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.segIcon {
+  flex: none;
+  color: currentColor;
+}
+
+.segBtn:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.switch {
+  position: relative;
+  flex: none;
+  box-sizing: border-box;
+  width: 34px;
+  height: 20px;
+  padding: 0;
+  cursor: pointer;
+  background: var(--dsw-alias-border-l1, rgba(0, 0, 0, 0.22));
+  border: 0;
+  border-radius: 999px;
+  transition: background 140ms ease;
+}
+
+.switchOn {
+  background: var(--dsw-alias-state-business-primary, #4f73ff);
+}
+
+.switch:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.switchKnob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 140ms ease;
+}
+
+.switchOn .switchKnob {
+  transform: translateX(14px);
+}
+
+.notice {
+  padding-top: 8px;
+  color: var(--dsw-alias-label-caption, #8a8f98);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.error {
+  color: var(--dsw-alias-state-error, #c93b3b);
+}
+
+@media (max-width: 640px) {
+  .row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+}
