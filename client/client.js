@@ -25,7 +25,8 @@ const zh = {
 	settingsDefaultLocalHint: "空白对话直接在主工作区开始。",
 	settingsDefaultWorktreeHint: "空白对话以 worktree 模式开始：发出第一条消息时自动创建隔离的 worktree，无需再手动选择。",
 	settingsRemember: "记住上次选择",
-	settingsRememberHint: "开启后，在输入框上方切换模式时会同时更新上面的默认模式；关闭后，切换只对当前对话生效。",
+	settingsRememberHint: "空白对话沿用你在输入框上方最后选定的模式。",
+	settingsRememberedNow: "当前记住：",
 	settingsUnavailable: "当前宿主没有可写的设置存储，修改不会被保存。",
 	settingsSaveFailed: "保存失败"
 };
@@ -45,7 +46,8 @@ const en = {
 	settingsDefaultLocalHint: "A blank conversation starts directly in the main workspace.",
 	settingsDefaultWorktreeHint: "A blank conversation starts in worktree mode: the isolated worktree is created automatically with your first message.",
 	settingsRemember: "Remember the last choice",
-	settingsRememberHint: "On: switching the mode above the composer also updates the default above. Off: a switch only applies to the current conversation.",
+	settingsRememberHint: "A blank conversation starts with the mode you picked last above the composer.",
+	settingsRememberedNow: "Currently remembered: ",
 	settingsUnavailable: "This host has no writable settings storage, so changes cannot be saved.",
 	settingsSaveFailed: "Could not save"
 };
@@ -500,6 +502,10 @@ function createWorktreeStore() {
 */
 /** Settings namespace owned by the host half; keep in sync with `lib/index.js`. */
 const SETTINGS_NS = "task-worktree";
+/** Read the three-way panel choice out of a resolved section. */
+function choiceOf(prefs) {
+	return prefs.rememberLastChoice ? "last" : prefs.defaultMode;
+}
 /** Snapshot used before any settings service answers. */
 const PREFS_FALLBACK = Object.freeze({
 	defaultMode: "local",
@@ -544,21 +550,29 @@ function createPrefsStore() {
 		});
 	};
 	/**
-	* One user choice. `set` resolves even when the host REFUSES the write, so
-	* acceptance is confirmed by re-reading the scope (the documented contract of
-	* the settings transport); a rejected write triggers the scope's recovery
-	* read, and either way the store ends up showing what the host accepted.
+	* Apply ordered writes and confirm acceptance by re-reading the scope.
+	*
+	* The transport RESOLVES even when the host refuses a write, so the resolved
+	* promise proves nothing; the documented way to detect refusal is to read the
+	* section back (a rejected write triggers the scope's recovery read first).
+	* A host without `mutate` falls back to per-field `set`, which is the same
+	* sequence without the atomicity fence.
 	*/
-	const write = async (field, value) => {
+	const apply$1 = async (ops) => {
 		if (scope === void 0) return false;
 		try {
-			await scope.set(field, value);
+			if (typeof scope.mutate === "function") await scope.mutate(ops);
+			else for (const op of ops) if (op.op === "set") await scope.set(op.path[0], op.value);
 		} catch (error) {
 			console.warn(`[dsh-task-worktree] settings write failed: ${error instanceof Error ? error.message : String(error)}`);
 			return false;
 		}
 		const current = scope.getSnapshot();
-		return current.status === "ready" && current.value?.[field] === value;
+		const section = current.value;
+		if (current.status !== "ready" || section === void 0) return false;
+		const accepted = ops.every((op) => op.op !== "set" || section[op.path[0]] === op.value);
+		adopt();
+		return accepted;
 	};
 	return {
 		subscribe(listener) {
@@ -577,17 +591,34 @@ function createPrefsStore() {
 			return scope.subscribe(adopt);
 		},
 		setDefaultMode(mode) {
-			return write("defaultMode", mode);
+			return apply$1([{
+				op: "set",
+				path: ["defaultMode"],
+				value: mode
+			}]);
 		},
-		setRememberLastChoice(remember) {
-			return write("rememberLastChoice", remember);
+		setNewConversationChoice(choice) {
+			if (choice === "last") return apply$1([{
+				op: "set",
+				path: ["rememberLastChoice"],
+				value: true
+			}]);
+			return apply$1([{
+				op: "set",
+				path: ["defaultMode"],
+				value: choice
+			}, {
+				op: "set",
+				path: ["rememberLastChoice"],
+				value: false
+			}]);
 		}
 	};
 }
 
 //#endregion
 //#region \0dsh-css:src/client/WorktreeSettings.module.css.mjs
-const css = ".sqfP6G_card{box-sizing:border-box;width:100%;color:var(--dsw-alias-label-primary,#1f1f1f);background:var(--dsw-alias-bg-base,#fff);border:1px solid var(--dsw-alias-border-l2,#0000001f);border-radius:10px;overflow:hidden}.sqfP6G_cardOpen{background:var(--dsw-alias-bg-base,#fff)}.sqfP6G_header{width:100%;color:inherit;font:inherit;text-align:left;cursor:pointer;background:0 0;border:0;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;display:flex}.sqfP6G_header:hover{background:var(--dsw-alias-interactive-bg-hover,#00000009)}.sqfP6G_header:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#4f73ff);outline-offset:1px}.sqfP6G_segBtn:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#4f73ff);outline-offset:1px}.sqfP6G_switch:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#4f73ff);outline-offset:1px}.sqfP6G_headText{min-width:0}.sqfP6G_name{font-size:14px;font-weight:600;line-height:20px}.sqfP6G_desc{color:var(--dsw-alias-label-secondary,#5f6368);margin-top:2px;font-size:12px;line-height:17px}.sqfP6G_chevron{color:var(--dsw-alias-label-caption,#8a8f98);flex:none;transition:transform .14s;display:inline-flex}.sqfP6G_chevronOpen{transform:rotate(180deg)}.sqfP6G_body{border-top:1px solid var(--dsw-alias-border-l2,#00000014);flex-direction:column;gap:4px;padding:2px 14px 12px;display:flex}.sqfP6G_row{border-bottom:1px solid var(--dsw-alias-border-l2,#0000000f);justify-content:space-between;align-items:center;gap:16px;padding:10px 0;display:flex}.sqfP6G_row:last-of-type{border-bottom:0}.sqfP6G_labelBox{min-width:0}.sqfP6G_label{font-size:13px;font-weight:500;line-height:19px}.sqfP6G_hint{color:var(--dsw-alias-label-secondary,#5f6368);margin-top:2px;font-size:12px;line-height:17px}.sqfP6G_seg{background:var(--dsw-alias-interactive-bg-hover,#0000000b);border-radius:8px;flex:none;gap:2px;padding:2px;display:inline-flex}.sqfP6G_segBtn{min-height:28px;color:var(--dsw-alias-label-secondary,#5f6368);font:inherit;white-space:nowrap;cursor:pointer;background:0 0;border:0;border-radius:6px;align-items:center;gap:5px;padding:4px 10px;font-size:13px;display:inline-flex}.sqfP6G_segBtn:hover:not(:disabled){color:var(--dsw-alias-label-primary,#1f1f1f)}.sqfP6G_segOn{color:var(--dsw-alias-label-primary,#1f1f1f);background:var(--dsw-alias-bg-base,#fff);font-weight:500;box-shadow:0 1px 2px #0000001f}.sqfP6G_segIcon{color:currentColor;flex:none}.sqfP6G_segBtn:disabled{cursor:default;opacity:.5}.sqfP6G_switch{box-sizing:border-box;cursor:pointer;background:var(--dsw-alias-border-l1,#00000038);border:0;border-radius:999px;flex:none;width:34px;height:20px;padding:0;transition:background .14s;position:relative}.sqfP6G_switchOn{background:var(--dsw-alias-state-business-primary,#4f73ff)}.sqfP6G_switch:disabled{cursor:default;opacity:.5}.sqfP6G_switchKnob{background:#fff;border-radius:50%;width:16px;height:16px;transition:transform .14s;position:absolute;top:2px;left:2px;box-shadow:0 1px 2px #00000040}.sqfP6G_switchOn .sqfP6G_switchKnob{transform:translate(14px)}.sqfP6G_notice{color:var(--dsw-alias-label-caption,#8a8f98);padding-top:8px;font-size:12px;line-height:17px}.sqfP6G_error{color:var(--dsw-alias-state-error,#c93b3b)}@media (max-width:640px){.sqfP6G_row{flex-direction:column;align-items:flex-start;gap:8px}}";
+const css = ".sqfP6G_card{box-sizing:border-box;width:100%;color:var(--dsw-alias-label-primary,#1f1f1f);background:var(--dsw-alias-bg-base,#fff);border:1px solid var(--dsw-alias-border-l2,#0000001f);border-radius:10px;overflow:hidden}.sqfP6G_cardOpen{background:var(--dsw-alias-bg-base,#fff)}.sqfP6G_header{width:100%;color:inherit;font:inherit;text-align:left;cursor:pointer;background:0 0;border:0;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;display:flex}.sqfP6G_header:hover{background:var(--dsw-alias-interactive-bg-hover,#00000009)}.sqfP6G_header:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#4f73ff);outline-offset:1px}.sqfP6G_segBtn:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#4f73ff);outline-offset:1px}.sqfP6G_headText{min-width:0}.sqfP6G_name{font-size:14px;font-weight:600;line-height:20px}.sqfP6G_desc{color:var(--dsw-alias-label-secondary,#5f6368);margin-top:2px;font-size:12px;line-height:17px}.sqfP6G_chevron{color:var(--dsw-alias-label-caption,#8a8f98);flex:none;transition:transform .14s;display:inline-flex}.sqfP6G_chevronOpen{transform:rotate(180deg)}.sqfP6G_body{border-top:1px solid var(--dsw-alias-border-l2,#00000014);flex-direction:column;gap:4px;padding:2px 14px 12px;display:flex}.sqfP6G_field{flex-direction:column;gap:8px;padding:12px 0 4px;display:flex}.sqfP6G_label{font-size:13px;font-weight:500;line-height:19px}.sqfP6G_hint{color:var(--dsw-alias-label-secondary,#5f6368);margin-top:2px;font-size:12px;line-height:17px}.sqfP6G_seg{background:var(--dsw-alias-interactive-bg-hover,#0000000b);border-radius:8px;flex-wrap:wrap;align-self:flex-start;gap:2px;padding:2px;display:inline-flex}.sqfP6G_segBtn{min-height:28px;color:var(--dsw-alias-label-secondary,#5f6368);font:inherit;white-space:nowrap;cursor:pointer;background:0 0;border:0;border-radius:6px;align-items:center;gap:5px;padding:4px 10px;font-size:13px;display:inline-flex}.sqfP6G_segBtn:hover:not(:disabled){color:var(--dsw-alias-label-primary,#1f1f1f)}.sqfP6G_segOn{color:var(--dsw-alias-label-primary,#1f1f1f);background:var(--dsw-alias-bg-base,#fff);font-weight:500;box-shadow:0 1px 2px #0000001f}.sqfP6G_segIcon{color:currentColor;flex:none}.sqfP6G_segBtn:disabled{cursor:default;opacity:.5}.sqfP6G_notice{color:var(--dsw-alias-label-caption,#8a8f98);padding-top:8px;font-size:12px;line-height:17px}.sqfP6G_error{color:var(--dsw-alias-state-error,#c93b3b)}";
 const tagId = "dsh-task-worktree/WorktreeSettings.module.css";
 if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {
 	const tag = document.createElement("style");
@@ -604,21 +635,17 @@ var WorktreeSettings_module_css_default = {
 	"chevronOpen": "sqfP6G_chevronOpen",
 	"desc": "sqfP6G_desc",
 	"error": "sqfP6G_error",
+	"field": "sqfP6G_field",
 	"headText": "sqfP6G_headText",
 	"header": "sqfP6G_header",
 	"hint": "sqfP6G_hint",
 	"label": "sqfP6G_label",
-	"labelBox": "sqfP6G_labelBox",
 	"name": "sqfP6G_name",
 	"notice": "sqfP6G_notice",
-	"row": "sqfP6G_row",
 	"seg": "sqfP6G_seg",
 	"segBtn": "sqfP6G_segBtn",
 	"segIcon": "sqfP6G_segIcon",
-	"segOn": "sqfP6G_segOn",
-	"switch": "sqfP6G_switch",
-	"switchKnob": "sqfP6G_switchKnob",
-	"switchOn": "sqfP6G_switchOn"
+	"segOn": "sqfP6G_segOn"
 };
 
 //#endregion
@@ -626,114 +653,64 @@ var WorktreeSettings_module_css_default = {
 /**
 * The plugin's card on the Plugins → Plugin configuration settings page.
 *
-* It owns the `task-worktree` settings namespace: the mode a NEW conversation
-* starts in, and whether the composer's mode selector remembers the last
-* choice. Both writes go through the client settings scope (revision-fenced,
-* persisted by the host), so the value is live and survives restarts.
+* It owns the `task-worktree` settings namespace through ONE three-way choice:
+* pin local mode, pin worktree mode, or let the composer's picker decide and
+* remember it. Two controls (a mode plus a "remember" switch) would describe
+* the same three states with a fourth combination that means nothing, which is
+* why this is a single radio group.
 *
-* The card is dispatched by the Plugins section under the settings namespace
-* this plugin's host half registers, so it appears only where that namespace
-* is actually served. The host's own card chrome is package-internal, so the
-* container is drawn here with the same design tokens.
+* Writes go through the client settings scope (revision-fenced, persisted by
+* the host), so the value is live and survives restarts. The card is dispatched
+* by the Plugins section under the settings namespace this plugin's host half
+* registers, so it appears only where that namespace is actually served. The
+* host's own card chrome is package-internal, so the container is drawn here
+* with the same design tokens.
 */
-/** One label + hint block with an optional control, the host's row shape. */
-function Row(label, hint, control) {
-	return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-		className: WorktreeSettings_module_css_default.row,
-		children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-			className: WorktreeSettings_module_css_default.labelBox,
-			children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
-				className: WorktreeSettings_module_css_default.label,
-				children: label
-			}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
-				className: WorktreeSettings_module_css_default.hint,
-				children: hint
-			})]
-		}), control]
-	});
-}
 function WorktreeSettingsCard({ prefs, t }) {
 	const snapshot = (0, react.useSyncExternalStore)(prefs.subscribe, prefs.getSnapshot);
 	const [open, setOpen] = (0, react.useState)(false);
-	const [busy, setBusy] = (0, react.useState)(null);
+	const [busy, setBusy] = (0, react.useState)(false);
 	const [failed, setFailed] = (0, react.useState)(false);
-	const disabled = !snapshot.available || busy !== null;
-	const chooseMode = (mode) => {
-		if (disabled || snapshot.defaultMode === mode) return;
-		setBusy(mode);
-		setFailed(false);
-		prefs.setDefaultMode(mode).then((ok) => {
-			if (!ok) setFailed(true);
-		}).finally(() => {
-			setBusy(null);
-		});
-	};
-	const toggleRemember = () => {
-		if (disabled) return;
-		setBusy("remember");
-		setFailed(false);
-		prefs.setRememberLastChoice(!snapshot.rememberLastChoice).then((ok) => {
-			if (!ok) setFailed(true);
-		}).finally(() => {
-			setBusy(null);
-		});
-	};
-	const body = /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-		className: WorktreeSettings_module_css_default.body,
-		children: [
-			Row(t("settingsDefaultMode"), snapshot.defaultMode === "worktree" ? t("settingsDefaultWorktreeHint") : t("settingsDefaultLocalHint"), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-				className: WorktreeSettings_module_css_default.seg,
-				role: "radiogroup",
-				"aria-label": t("settingsDefaultMode"),
-				children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
-					type: "button",
-					role: "radio",
-					"aria-checked": snapshot.defaultMode === "local",
-					className: snapshot.defaultMode === "local" ? `${WorktreeSettings_module_css_default.segBtn} ${WorktreeSettings_module_css_default.segOn}` : WorktreeSettings_module_css_default.segBtn,
-					disabled,
-					onClick: () => {
-						chooseMode("local");
-					},
-					children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)(__deepseek_ai_dsh_client_ui_primitives.IconFolderOpenOutline16, {
-						size: 13,
-						className: WorktreeSettings_module_css_default.segIcon
-					}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { children: t("localMode") })]
-				}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
-					type: "button",
-					role: "radio",
-					"aria-checked": snapshot.defaultMode === "worktree",
-					className: snapshot.defaultMode === "worktree" ? `${WorktreeSettings_module_css_default.segBtn} ${WorktreeSettings_module_css_default.segOn}` : WorktreeSettings_module_css_default.segBtn,
-					disabled,
-					onClick: () => {
-						chooseMode("worktree");
-					},
-					children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)(__deepseek_ai_dsh_client_ui_primitives.IconBranchOutline16, {
-						size: 13,
-						className: WorktreeSettings_module_css_default.segIcon
-					}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { children: t("worktreeMode") })]
-				})]
-			})),
-			Row(t("settingsRemember"), t("settingsRememberHint"), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
-				type: "button",
-				role: "switch",
-				"aria-checked": snapshot.rememberLastChoice,
-				"aria-label": t("settingsRemember"),
-				className: snapshot.rememberLastChoice ? `${WorktreeSettings_module_css_default.switch} ${WorktreeSettings_module_css_default.switchOn}` : WorktreeSettings_module_css_default.switch,
-				disabled,
-				onClick: toggleRemember,
-				children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { className: WorktreeSettings_module_css_default.switchKnob })
-			})),
-			snapshot.status === "unavailable" && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
-				className: WorktreeSettings_module_css_default.notice,
-				children: t("settingsUnavailable")
-			}),
-			failed && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
-				className: `${WorktreeSettings_module_css_default.notice} ${WorktreeSettings_module_css_default.error}`,
-				role: "alert",
-				children: t("settingsSaveFailed")
+	const disabled = !snapshot.available || busy;
+	const choice = choiceOf(snapshot);
+	const remembered = snapshot.defaultMode === "worktree" ? t("worktreeMode") : t("localMode");
+	const hint = choice === "last" ? `${t("settingsRememberHint")} ${t("settingsRememberedNow")}${remembered}` : choice === "worktree" ? t("settingsDefaultWorktreeHint") : t("settingsDefaultLocalHint");
+	const options = [
+		{
+			id: "local",
+			label: t("localMode"),
+			icon: /* @__PURE__ */ (0, react_jsx_runtime.jsx)(__deepseek_ai_dsh_client_ui_primitives.IconFolderOpenOutline16, {
+				size: 13,
+				className: WorktreeSettings_module_css_default.segIcon
 			})
-		]
-	});
+		},
+		{
+			id: "worktree",
+			label: t("worktreeMode"),
+			icon: /* @__PURE__ */ (0, react_jsx_runtime.jsx)(__deepseek_ai_dsh_client_ui_primitives.IconBranchOutline16, {
+				size: 13,
+				className: WorktreeSettings_module_css_default.segIcon
+			})
+		},
+		{
+			id: "last",
+			label: t("settingsRemember"),
+			icon: /* @__PURE__ */ (0, react_jsx_runtime.jsx)(__deepseek_ai_dsh_client_ui_primitives.IconRefreshOutline16, {
+				size: 13,
+				className: WorktreeSettings_module_css_default.segIcon
+			})
+		}
+	];
+	const choose = (next) => {
+		if (disabled || next === choice) return;
+		setBusy(true);
+		setFailed(false);
+		prefs.setNewConversationChoice(next).then((ok) => {
+			if (!ok) setFailed(true);
+		}).finally(() => {
+			setBusy(false);
+		});
+	};
 	return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 		className: open ? `${WorktreeSettings_module_css_default.card} ${WorktreeSettings_module_css_default.cardOpen}` : WorktreeSettings_module_css_default.card,
 		"data-testid": "worktree-settings-card",
@@ -757,7 +734,49 @@ function WorktreeSettingsCard({ prefs, t }) {
 				className: open ? `${WorktreeSettings_module_css_default.chevron} ${WorktreeSettings_module_css_default.chevronOpen}` : WorktreeSettings_module_css_default.chevron,
 				children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)(__deepseek_ai_dsh_client_ui_primitives.IconChevronDownOutline14, { size: 14 })
 			})]
-		}), open && body]
+		}), open && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+			className: WorktreeSettings_module_css_default.body,
+			children: [
+				/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+					className: WorktreeSettings_module_css_default.field,
+					children: [
+						/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+							className: WorktreeSettings_module_css_default.label,
+							children: t("settingsDefaultMode")
+						}),
+						/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+							className: WorktreeSettings_module_css_default.seg,
+							role: "radiogroup",
+							"aria-label": t("settingsDefaultMode"),
+							children: options.map((option) => /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
+								type: "button",
+								role: "radio",
+								"aria-checked": choice === option.id,
+								className: choice === option.id ? `${WorktreeSettings_module_css_default.segBtn} ${WorktreeSettings_module_css_default.segOn}` : WorktreeSettings_module_css_default.segBtn,
+								disabled,
+								onClick: () => {
+									choose(option.id);
+								},
+								children: [option.icon, /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { children: option.label })]
+							}, option.id))
+						}),
+						/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+							className: WorktreeSettings_module_css_default.hint,
+							children: hint
+						})
+					]
+				}),
+				snapshot.status === "unavailable" && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+					className: WorktreeSettings_module_css_default.notice,
+					children: t("settingsUnavailable")
+				}),
+				failed && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+					className: `${WorktreeSettings_module_css_default.notice} ${WorktreeSettings_module_css_default.error}`,
+					role: "alert",
+					children: t("settingsSaveFailed")
+				})
+			]
+		})]
 	});
 }
 

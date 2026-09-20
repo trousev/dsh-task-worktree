@@ -83,16 +83,20 @@ Requires: DeepSeek Harness `0.1.0-rc.7` package line, Git 2.31+, Node 20+.
 ## Settings
 
 The plugin registers the `task-worktree` settings namespace and ships its own
-card in **Settings → Plugins → Plugin configuration**.
+card in **Settings → Plugins → Plugin configuration**. One setting — the mode a
+new conversation starts in — with three choices (they are exactly the three
+states there are; a mode plus a separate "remember" switch would describe a
+fourth one that means nothing):
 
-| Field | Default | Meaning |
+| Choice in the panel | Stored in `task-worktree` | Meaning |
 | --- | --- | --- |
-| `defaultMode` | `local` | Mode a new conversation starts in. `worktree` makes the host inject the worktree-creation instruction with the first genuine message, so a new task is isolated without touching the selector. |
-| `rememberLastChoice` | `true` | The mode picker above the composer also updates `defaultMode`, so the next conversation starts the same way. Off: a pick only applies to the current conversation. |
+| Local mode | `defaultMode: local`, `rememberLastChoice: false` | Every new conversation starts in the main workspace. |
+| Worktree mode | `defaultMode: worktree`, `rememberLastChoice: false` | Every new conversation is isolated: the host injects the worktree-creation instruction with the first genuine message, no selector trip needed. |
+| Remember the last choice | `rememberLastChoice: true` | The mode you picked last above the composer wins; `defaultMode` holds that pick. |
 
-The default applies to conversations that start empty. Picking **Local mode**
+The chosen mode applies to conversations that start empty. Picking **Local mode**
 in the composer selector is an explicit answer for that conversation: the host
-does not auto-arm it, whatever the default says.
+does not auto-arm it, whatever the setting says.
 
 Values live in the ordinary user-settings document, so they can also be set by
 hand and take effect live:
@@ -100,7 +104,7 @@ hand and take effect live:
 ```yaml
 task-worktree:
   defaultMode: worktree
-  rememberLastChoice: true
+  rememberLastChoice: false
 ```
 
 On a host without the settings service the plugin keeps working with the

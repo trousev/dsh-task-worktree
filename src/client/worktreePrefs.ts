@@ -20,12 +20,28 @@ export const SETTINGS_NS = 'task-worktree'
 /** Mode a conversation can start in. */
 export type DefaultMode = 'local' | 'worktree'
 
+/**
+ * The choice a user makes in the settings panel.
+ *
+ * Three states, because there are only three: pin local, pin worktree, or let
+ * the composer decide and remember it. The first two map to
+ * `{ defaultMode, rememberLastChoice: false }`, the third to
+ * `rememberLastChoice: true` with `defaultMode` holding whatever was picked
+ * last.
+ */
+export type NewConversationChoice = DefaultMode | 'last'
+
 /** The user-editable section of the settings namespace. */
 export interface WorktreePreferences {
-  /** Mode a blank conversation starts in. */
+  /** Mode a blank conversation starts in (the remembered pick under `last`). */
   defaultMode: DefaultMode
   /** Composer choices write `defaultMode` back, so the next conversation matches. */
   rememberLastChoice: boolean
+}
+
+/** Read the three-way panel choice out of a resolved section. */
+export function choiceOf(prefs: Pick<WorktreePreferences, 'defaultMode' | 'rememberLastChoice'>): NewConversationChoice {
+  return prefs.rememberLastChoice ? 'last' : prefs.defaultMode
 }
 
 /** Snapshot the components subscribe to. */
@@ -34,6 +50,13 @@ export interface WorktreePrefsSnapshot extends WorktreePreferences {
   status: 'loading' | 'ready' | 'unavailable'
   /** Whether a writable settings scope is bound (false: edits cannot persist). */
   available: boolean
+}
+
+/** One ordered write inside the settings namespace section. */
+export interface SettingsFieldOp {
+  op: 'set' | 'unset'
+  path: string[]
+  value?: unknown
 }
 
 /** The subset of the client settings scope this plugin touches. */
@@ -45,6 +68,8 @@ interface SettingsScopeLike<T> {
   }
   subscribe(listener: () => void): () => void
   set(field: string, value: unknown): Promise<void>
+  /** Atomic multi-field write; every host in the supported line exposes it. */
+  mutate?(ops: readonly SettingsFieldOp[], expectedRevision?: number): Promise<void>
 }
 
 /** The subset of `ctx.settingsScope` this plugin touches. */
@@ -58,8 +83,10 @@ export interface WorktreePrefsStore {
   getSnapshot(): WorktreePrefsSnapshot
   /** Bind the durable scope; returns the unsubscribe function (an effect body). */
   bind(binder: SettingsScopeBinder): () => void
+  /** Write the mode a conversation just started with (composer "remember" path). */
   setDefaultMode(mode: DefaultMode): Promise<boolean>
-  setRememberLastChoice(remember: boolean): Promise<boolean>
+  /** Write the panel's three-way choice, atomically. */
+  setNewConversationChoice(choice: NewConversationChoice): Promise<boolean>
 }
 
 /** Snapshot used before any settings service answers. */
@@ -116,21 +143,36 @@ export function createPrefsStore(): WorktreePrefsStore {
   }
 
   /**
-   * One user choice. `set` resolves even when the host REFUSES the write, so
-   * acceptance is confirmed by re-reading the scope (the documented contract of
-   * the settings transport); a rejected write triggers the scope's recovery
-   * read, and either way the store ends up showing what the host accepted.
+   * Apply ordered writes and confirm acceptance by re-reading the scope.
+   *
+   * The transport RESOLVES even when the host refuses a write, so the resolved
+   * promise proves nothing; the documented way to detect refusal is to read the
+   * section back (a rejected write triggers the scope's recovery read first).
+   * A host without `mutate` falls back to per-field `set`, which is the same
+   * sequence without the atomicity fence.
    */
-  const write = async (field: keyof WorktreePreferences, value: unknown): Promise<boolean> => {
+  const apply = async (ops: readonly SettingsFieldOp[]): Promise<boolean> => {
     if (scope === undefined) return false
     try {
-      await scope.set(field, value)
+      if (typeof scope.mutate === 'function') {
+        await scope.mutate(ops)
+      } else {
+        for (const op of ops) {
+          if (op.op === 'set') await scope.set(op.path[0], op.value)
+        }
+      }
     } catch (error) {
       console.warn(`[dsh-task-worktree] settings write failed: ${error instanceof Error ? error.message : String(error)}`)
       return false
     }
     const current = scope.getSnapshot()
-    return current.status === 'ready' && current.value?.[field] === value
+    const section = current.value as Record<string, unknown> | undefined
+    if (current.status !== 'ready' || section === undefined) return false
+    const accepted = ops.every((op) => op.op !== 'set' || section[op.path[0]] === op.value)
+    // Fold what the host accepted into our own snapshot now, rather than
+    // waiting for the scope's change notification.
+    adopt()
+    return accepted
   }
 
   return {
@@ -147,10 +189,16 @@ export function createPrefsStore(): WorktreePrefsStore {
       return scope.subscribe(adopt)
     },
     setDefaultMode(mode) {
-      return write('defaultMode', mode)
+      return apply([{ op: 'set', path: ['defaultMode'], value: mode }])
     },
-    setRememberLastChoice(remember) {
-      return write('rememberLastChoice', remember)
+    setNewConversationChoice(choice) {
+      if (choice === 'last') {
+        return apply([{ op: 'set', path: ['rememberLastChoice'], value: true }])
+      }
+      return apply([
+        { op: 'set', path: ['defaultMode'], value: choice },
+        { op: 'set', path: ['rememberLastChoice'], value: false },
+      ])
     },
   }
 }

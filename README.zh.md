@@ -61,21 +61,22 @@ dsh plugin --profile web add dsh-task-worktree
 
 ## 设置
 
-插件注册 `task-worktree` 设置命名空间，并在**设置 → 插件 → Plugin configuration** 里提供自己的卡片。
+插件注册 `task-worktree` 设置命名空间，并在**设置 → 插件 → Plugin configuration** 里提供自己的卡片。只有一项设置——新对话的默认模式——三个选项（本来就只有这三种状态；拆成「模式 + 记住上次选择」开关会多出一个毫无意义的组合）：
 
-| 字段 | 默认 | 含义 |
+| 面板选项 | 存储在 `task-worktree` | 含义 |
 | --- | --- | --- |
-| `defaultMode` | `local` | 新对话的默认模式。设为 `worktree` 时，宿主会在第一条真人消息到达时自动注入创建指引——不用再手动选，新任务天然隔离。 |
-| `rememberLastChoice` | `true` | 输入框上方的模式切换同时更新 `defaultMode`，下个对话自动沿用上次选择；关闭后切换只对当前对话生效。 |
+| 本地模式 | `defaultMode: local`、`rememberLastChoice: false` | 每个新对话都直接在主工作区开始。 |
+| Worktree模式 | `defaultMode: worktree`、`rememberLastChoice: false` | 每个新对话都隔离：宿主在第一条真人消息到达时自动注入创建指引，不必再动手选。 |
+| 记住上次选择 | `rememberLastChoice: true` | 以你在输入框上方最后选定的模式为准，`defaultMode` 保存该选择。 |
 
-默认模式只作用于「从空白开始」的对话。在输入框上方选**本地模式**即是对该对话的明确表态：无论默认是什么，宿主都不会为它自动武装。
+所选模式只作用于「从空白开始」的对话。在输入框上方选**本地模式**即是对该对话的明确表态：无论设置是什么，宿主都不会为它自动武装。
 
 设置存在普通的用户设置文档里，也可以直接手改并即时生效：
 
 ```yaml
 task-worktree:
   defaultMode: worktree
-  rememberLastChoice: true
+  rememberLastChoice: false
 ```
 
 宿主没有设置服务时，插件继续用组合默认值（本地模式）工作，卡片不会出现。

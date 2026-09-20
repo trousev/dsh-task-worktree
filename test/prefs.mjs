@@ -5,9 +5,9 @@
  * than failing the build.
  * Run: node test/prefs.mjs
  */
-let createPrefsStore, PREFS_FALLBACK, SETTINGS_NS
+let createPrefsStore, choiceOf, PREFS_FALLBACK, SETTINGS_NS
 try {
-  ({ createPrefsStore, PREFS_FALLBACK, SETTINGS_NS } = await import('../src/client/worktreePrefs.ts'))
+  ({ createPrefsStore, choiceOf, PREFS_FALLBACK, SETTINGS_NS } = await import('../src/client/worktreePrefs.ts'))
 } catch (error) {
   console.log(`SKIP prefs — this Node cannot import TypeScript sources (${error.code ?? error.message}); requires Node 22.6+`)
   process.exit(0)
@@ -37,6 +37,13 @@ function fakeBinder(section, behavior = 'accept') {
     value: section,
     writable: true,
   }
+  const applyOps = (ops) => {
+    for (const op of ops) {
+      writes.push({ op: op.op, field: op.path[0], value: op.value })
+      if (behavior !== 'accept' || op.op !== 'set') continue
+      snapshot = { ...snapshot, value: { ...snapshot.value, [op.path[0]]: op.value } }
+    }
+  }
   const scope = {
     getSnapshot: () => snapshot,
     subscribe(listener) {
@@ -44,9 +51,10 @@ function fakeBinder(section, behavior = 'accept') {
       return () => listeners.delete(listener)
     },
     async set(field, value) {
-      writes.push({ field, value })
-      if (behavior !== 'accept') return
-      snapshot = { ...snapshot, value: { ...snapshot.value, [field]: value } }
+      applyOps([{ op: 'set', path: [field], value }])
+    },
+    async mutate(ops) {
+      applyOps(ops)
     },
   }
   return {
@@ -89,22 +97,40 @@ console.log('reactivity')
   unsubscribe()
 }
 
+console.log('the three-way panel choice')
+{
+  check('pinned local reads as local', choiceOf({ defaultMode: 'local', rememberLastChoice: false }) === 'local')
+  check('pinned worktree reads as worktree', choiceOf({ defaultMode: 'worktree', rememberLastChoice: false }) === 'worktree')
+  check('remembering reads as last, whatever is remembered', choiceOf({ defaultMode: 'local', rememberLastChoice: true }) === 'last' && choiceOf({ defaultMode: 'worktree', rememberLastChoice: true }) === 'last')
+}
+
 console.log('writes')
 {
   const fake = fakeBinder({ defaultMode: 'local', rememberLastChoice: true })
   const store = createPrefsStore()
   store.bind(fake.binder)
+
   const accepted = await store.setDefaultMode('worktree')
   check('an accepted write reports true', accepted === true, JSON.stringify(store.getSnapshot()))
-  check('the write carries the field and value', JSON.stringify(fake.writes) === JSON.stringify([{ field: 'defaultMode', value: 'worktree' }]), JSON.stringify(fake.writes))
-  const remember = await store.setRememberLastChoice(false)
-  check('the remember toggle writes its own field', remember === true && fake.writes[1].field === 'rememberLastChoice')
+  check('the remembered pick only touches defaultMode', JSON.stringify(fake.writes) === JSON.stringify([{ op: 'set', field: 'defaultMode', value: 'worktree' }]), JSON.stringify(fake.writes))
+  check('remembering stays on', store.getSnapshot().rememberLastChoice === true && choiceOf(store.getSnapshot()) === 'last')
+
+  fake.writes.length = 0
+  check('pinning worktree is one atomic mutation', (await store.setNewConversationChoice('worktree')) === true)
+  check('it writes both fields', JSON.stringify(fake.writes) === JSON.stringify([
+    { op: 'set', field: 'defaultMode', value: 'worktree' },
+    { op: 'set', field: 'rememberLastChoice', value: false },
+  ]), JSON.stringify(fake.writes))
+  check('the panel now reads pinned worktree', choiceOf(store.getSnapshot()) === 'worktree')
+
+  fake.writes.length = 0
+  check('choosing "remember" writes only the flag', (await store.setNewConversationChoice('last')) === true)
+  check('and keeps the last mode as the value', JSON.stringify(fake.writes) === JSON.stringify([{ op: 'set', field: 'rememberLastChoice', value: true }]) && store.getSnapshot().defaultMode === 'worktree', JSON.stringify(fake.writes))
 
   const refusing = fakeBinder({ defaultMode: 'local', rememberLastChoice: true }, 'refuse')
   const refused = createPrefsStore()
   refused.bind(refusing.binder)
-  const ok = await refused.setDefaultMode('worktree')
-  check('a transport that resolves while the host refuses reports false', ok === false)
+  check('a transport that resolves while the host refuses reports false', (await refused.setNewConversationChoice('worktree')) === false)
 }
 
 console.log('without a bound scope')
